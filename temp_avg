@@ -5,13 +5,13 @@ while [[ $# -gt 0 ]]
 do
     arg="$1"
     case $arg in 
-        -n)
+        -d)
             delay=$2
             shift
             shift
         ;;
         -q)
-            quiet=true
+            no_log=true
             shift
         ;;
         -m)
@@ -30,7 +30,7 @@ echo "Measuring cores temperature every $delay seconds..."
 echo "Ctrl+C to stop and show results"
 
 # If option -q is not used
-if [[ -z $quiet ]]
+if [[ -z $no_log ]]
 then
     # Directory where this script file is located
     script_dir=$(dirname $(readlink -f $0))
@@ -74,7 +74,7 @@ on_exit() {
     elapsed=$(echo "scale=4;$elapsed - $minutes_elapsed * 60" | bc)
 
     # If option -q is specified then print times and exit
-    if [[ ! -z $quiet ]]
+    if [[ ! -z $no_log ]]
     then
         echo "Script ended at $(date +%H:%M:%S)"
         echo "Was taking measures for"
@@ -135,7 +135,7 @@ do
     sensors_out=$(sensors)
     core_temps=$(sed -n "s/^Core [0-9]\+:\s\++\([0-9][0-9]\.[0-9]\).*$/\1/p" <<< $sensors_out)
     # Log core temperatures in file if -q option is not set
-    if [[ -z $quiet ]]
+    if [[ -z $no_log ]]
     then
         log_line=""
         while IFS= read -r t;
