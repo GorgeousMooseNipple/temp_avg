@@ -133,14 +133,29 @@ fi
 while true
 do
     sensors_out=$(sensors)
-    core0=$(sed -n "s/^Core 0:\s\++\([0-9][0-9]\.[0-9]\).*$/\1/p" <<< $sensors_out)
-    core1=$(sed -n "s/^Core 1:\s\++\([0-9][0-9]\.[0-9]\).*$/\1/p" <<< $sensors_out)
+    core_temps=$(sed -n "s/^Core [0-9]\+:\s\++\([0-9][0-9]\.[0-9]\).*$/\1/p" <<< $sensors_out)
+    # Log core temperatures in file if -q option is not set
     if [[ -z $quiet ]]
     then
-        printf "$core0\t$core1\n" >> "$log_file"
+        log_line=""
+        while IFS= read -r t;
+        do
+            log_line="$log_line$t\t"
+        done <<< $core_temps
+        # Remove trailing tab
+        log_line="${log_line%\\t}"
+        printf "$log_line\n" >> "$log_file"
     fi
 
-    printf "\rCore 0: $core0\xC2\xB0, Core 1: $core1\xC2\xB0"
+    core_idx=0
+    print_temps="\r"
+    while IFS= read -r t;
+    do
+        print_temps="${print_temps}Core ${core_idx}: $t\xC2\xB0, "
+        core_idx=$((++core_idx))
+    done <<< "$core_temps"
+    
+    printf "$print_temps"
     sleep $delay
 done
 
