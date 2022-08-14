@@ -1,0 +1,147 @@
+#! /usr/bin/env bash
+
+# Parse options
+while [[ $# -gt 0 ]]
+do
+    arg="$1"
+    case $arg in 
+        -n)
+            delay=$2
+            shift
+            shift
+        ;;
+        -q)
+            quiet=true
+            shift
+        ;;
+        -m)
+            message=$2
+            shift
+            shift
+        ;;
+        *)
+            echo $'\nUnknown argument '"$1"$'\n'
+            exit 1
+        ;;
+    esac
+done
+
+echo "Measuring cores temperature every $delay seconds..."
+echo "Ctrl+C to stop and show results"
+
+# If option -q is not used
+if [[ -z $quiet ]]
+then
+    # Directory where this script file is located
+    script_dir=$(dirname $(readlink -f $0))
+    log_dir="$script_dir/logs_temp_avg"
+    
+    # If log_dir not exists
+    if [[ ! -e $log_dir ]];
+    then
+        mkdir $log_dir
+    fi
+    
+    # If option -m was provided change log_file name accordingly
+    if [[ -z $message ]]
+    then
+        log_file="$log_dir/log_$(date +%d-%m_%H-%M-%S)"
+    else
+        log_file="$log_dir/$message""_$(date +%d-%m_%H-%M-%S)"
+    fi
+    
+    touch $log_file
+fi
+
+# Seconds from 1970 to now or something
+start_time=$(date -u +%s)
+start_time_readable=$(date +%H:%M:%S)
+
+# Run this to calculate mean values and output results in stdout and log_file
+on_exit() {
+    echo $'\n' 
+
+    end_time=$(date -u +%s)
+    elapsed=$(($end_time - $start_time))
+    hours_elapsed=$(echo "scale=4;$elapsed / (60 * 60)" | bc)
+    # Round (floor)
+    hours_elapsed=$(echo "scale=0;$hours_elapsed / 1" | bc)
+    elapsed=$(echo "scale=4;$elapsed - $hours_elapsed * 60 * 60" | bc)
+    minutes_elapsed=$(echo "scale=4;$elapsed / 60" | bc)
+    # Round (floor)
+    minutes_elapsed=$(echo "scale=0;$minutes_elapsed / 1" | bc)
+    # Only seconds left in $elapsed at this point
+    elapsed=$(echo "scale=4;$elapsed - $minutes_elapsed * 60" | bc)
+
+    # If option -q is specified then print times and exit
+    if [[ ! -z $quiet ]]
+    then
+        echo "Script ended at $(date +%H:%M:%S)"
+        echo "Was taking measures for"
+        echo "$hours_elapsed hours, $minutes_elapsed minutes, $elapsed seconds"
+        exit 0
+    fi
+
+    sum_c0=0
+    sum_c1=0
+    count=0
+    max_c0=0
+    max_c1=0
+    # Iterate over lines in log_file
+    while read line
+    do
+        # Set delimiter as \t and split line by it
+        IFS=$'\t'; read -a values <<<$line
+        val_c0=${values[0]}
+        val_c1=${values[1]}
+        sum_c0=$(echo $sum_c0+$val_c0 | bc)
+        sum_c1=$(echo $sum_c1+$val_c1 | bc)
+        ((++count))
+        if (( $(echo "$val_c0 > $max_c0" | bc -l) )); then
+            max_c0=$val_c0
+        fi
+        if (( $(echo "$val_c1 > $max_c1" | bc -l) )); then
+            max_c1=$val_c1
+        fi
+    done <$log_file
+
+    # Calculate means in bc because bash can't work with floats
+    mean_c0=$(echo "scale=4;$sum_c0 / $count" | bc)
+    mean_c1=$(echo "scale=4;$sum_c1 / $count" | bc)
+    # Replace values collected in log_file with results only. Also print to stdout using tee
+    tee $log_file <<<"Script started at $start_time_readable"
+    tee -a $log_file <<<"Core 0 mean temp: $mean_c0"
+    tee -a $log_file <<<"Core 0 max temp: $max_c0"
+    tee -a $log_file <<<"Core 1 mean temp: $mean_c1"
+    tee -a $log_file <<<"Core 1 max temp: $max_c1"
+
+    tee -a $log_file <<<"Script ended at $(date +%H:%M:%S)"
+    tee -a $log_file <<<"Was taking measures for"
+    tee -a $log_file <<<"$hours_elapsed hours, $minutes_elapsed minutes, $elapsed seconds"
+    exit 0
+}
+
+# Catch SIGINT and SIGTERM signals and run on_exit function
+trap on_exit SIGINT SIGTERM
+
+# If delay is not defined or contains just empty string
+if [[ -z $delay ]]
+then
+    delay=30
+fi
+
+while true
+do
+    sensors_out=$(sensors)
+    core0=$(sed -n "s/^Core 0:\s\++\([0-9][0-9]\.[0-9]\).*$/\1/p" <<< $sensors_out)
+    core1=$(sed -n "s/^Core 1:\s\++\([0-9][0-9]\.[0-9]\).*$/\1/p" <<< $sensors_out)
+    if [[ -z $quiet ]]
+    then
+        printf "$core0\t$core1\n" >> "$log_file"
+    fi
+
+    printf "\rCore 0: $core0\xC2\xB0, Core 1: $core1\xC2\xB0"
+    sleep $delay
+done
+
+
