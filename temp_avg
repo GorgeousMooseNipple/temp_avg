@@ -73,7 +73,7 @@ on_exit() {
     # Only seconds left in $elapsed at this point
     elapsed=$(echo "scale=4;$elapsed - $minutes_elapsed * 60" | bc)
 
-    # If option -q is specified then print times and exit
+    # If option -q is set then print timings and exit
     if [[ ! -z $no_log ]]
     then
         echo "Script ended at $(date +%H:%M:%S)"
@@ -82,38 +82,41 @@ on_exit() {
         exit 0
     fi
 
-    sum_c0=0
-    sum_c1=0
-    count=0
-    max_c0=0
-    max_c1=0
+    # Number of cores - number of columns in log file
+    num_cores=$(head -n 1 "$log_file" | wc -w)
+    # Initialize arrays with zeros
+    for ((i=0; i < $num_cores; i++)); do sum_temps[$i]=0; done
+    for ((i=0; i < $num_cores; i++)); do max_temps[$i]=0; done
+    count_temps=0
     # Iterate over lines in log_file
     while read line
     do
-        # Set delimiter as \t and split line by it
-        IFS=$'\t'; read -a values <<<$line
-        val_c0=${values[0]}
-        val_c1=${values[1]}
-        sum_c0=$(echo $sum_c0+$val_c0 | bc)
-        sum_c1=$(echo $sum_c1+$val_c1 | bc)
-        ((++count))
-        if (( $(echo "$val_c0 > $max_c0" | bc -l) )); then
-            max_c0=$val_c0
-        fi
-        if (( $(echo "$val_c1 > $max_c1" | bc -l) )); then
-            max_c1=$val_c1
-        fi
+        # Set delimiter as \t and split line by it, creating array temps
+        IFS=$'\t'; read -a temps<<<$line
+        core_idx=0
+        for t in "${temps[@]}"
+        do
+            sum_temps[$core_idx]=$(echo "${sum_temps[$core_idx]} + $t" | bc)
+            if (( $(echo "$t > ${max_temps[$core_idx]}" | bc -l) )); then
+                max_temps[$core_idx]="$t"
+            fi
+            ((++core_idx))
+        done <<<$temps 
+        ((++count_temps))
     done <$log_file
 
-    # Calculate means in bc because bash can't work with floats
-    mean_c0=$(echo "scale=4;$sum_c0 / $count" | bc)
-    mean_c1=$(echo "scale=4;$sum_c1 / $count" | bc)
+
     # Replace values collected in log_file with results only. Also print to stdout using tee
     tee $log_file <<<"Script started at $start_time_readable"
-    tee -a $log_file <<<"Core 0 mean temp: $mean_c0"
-    tee -a $log_file <<<"Core 0 max temp: $max_c0"
-    tee -a $log_file <<<"Core 1 mean temp: $mean_c1"
-    tee -a $log_file <<<"Core 1 max temp: $max_c1"
+    core_idx=0
+    # Calculate means in bc because bash can't work with floats
+    for (( i=0; i < $num_cores; i++ ));
+    do
+        mean=$(echo "scale=4;${sum_temps[$i]} / $count_temps" | bc)
+        tee -a $log_file <<<"Core $core_idx mean temp: $mean"
+        tee -a $log_file <<<"Core $core_idx max temp: ${max_temps[$i]}"
+        ((++core_idx))
+    done
 
     tee -a $log_file <<<"Script ended at $(date +%H:%M:%S)"
     tee -a $log_file <<<"Was taking measures for"
@@ -158,5 +161,4 @@ do
     printf "$print_temps"
     sleep $delay
 done
-
 
