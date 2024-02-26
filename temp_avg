@@ -26,7 +26,7 @@ do
     esac
 done
 
-# If delay is not provided as argument or contains just an empty string
+# If delay is not provided as an argument or contains just an empty string
 if [[ -z $delay ]]
 then
     delay=30
@@ -42,18 +42,21 @@ then
     script_dir=$(dirname $(readlink -f $0))
     log_dir="$script_dir/logs_temp_avg"
     
-    # If log_dir not exists
+    # If log_dir does not exist
     if [[ ! -e $log_dir ]];
     then
         mkdir $log_dir
     fi
     
+    # Current date and time
+    cur_datetime=$(date +%d-%m-%Y_%H-%M-%S)
+
     # If option -m was provided change log_file name accordingly
     if [[ -z $message ]]
     then
-        log_file="$log_dir/log_$(date +%d-%m_%H-%M-%S)"
+        log_file="$log_dir/log_$cur_datetime"
     else
-        log_file="$log_dir/$message""_$(date +%d-%m_%H-%M-%S)"
+        log_file="$log_dir/$message""_$cur_datetime"
     fi
     
     touch $log_file
@@ -79,7 +82,7 @@ on_exit() {
     # Only seconds left in $elapsed at this point
     elapsed=$(echo "scale=4;$elapsed - $minutes_elapsed * 60" | bc)
 
-    # If option -q is set then print timings and exit
+    # If option -q is set then print timings to stdout and exit
     if [[ ! -z $no_log ]]
     then
         echo "Script ended at $(date +%H:%M:%S)"
@@ -88,13 +91,13 @@ on_exit() {
         exit 0
     fi
 
-    # Number of cores - number of columns in log file
+    # Number of cores - number of columns in the log file
     num_cores=$(head -n 1 "$log_file" | wc -w)
     # Initialize arrays with zeros
     for ((i=0; i < $num_cores; i++)); do sum_temps[$i]=0; done
     for ((i=0; i < $num_cores; i++)); do max_temps[$i]=0; done
     count_temps=0
-    # Iterate over lines in log_file
+    # Iterate over lines in the log_file
     while read line
     do
         # Set delimiter as \t and split line by it, creating array temps
