@@ -26,6 +26,12 @@ do
     esac
 done
 
+# If delay is not provided as argument or contains just an empty string
+if [[ -z $delay ]]
+then
+    delay=30
+fi
+
 echo "Measuring cores temperature every $delay seconds..."
 echo "Ctrl+C to stop and show results"
 
@@ -105,7 +111,6 @@ on_exit() {
         ((++count_temps))
     done <$log_file
 
-
     # Replace values collected in log_file with results only. Also print to stdout using tee
     tee $log_file <<<"Script started at $start_time_readable"
     core_idx=0
@@ -126,12 +131,6 @@ on_exit() {
 
 # Catch SIGINT and SIGTERM signals and run on_exit function
 trap on_exit SIGINT SIGTERM
-
-# If delay is not defined or contains just empty string
-if [[ -z $delay ]]
-then
-    delay=30
-fi
 
 while true
 do
