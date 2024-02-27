@@ -14,6 +14,10 @@ do
             no_log=true
             shift
         ;;
+        -a)
+            append_log=true
+            shift
+        ;;
         -m)
             message=$2
             shift
@@ -114,8 +118,14 @@ on_exit() {
         ((++count_temps))
     done <$log_file
 
-    # Replace values collected in log_file with results only. Also print to stdout using tee
-    tee $log_file <<<"Script started at $start_time_readable"
+    # If -a option is not provided
+    # replace values collected in log_file with results only. Also print to stdout using tee
+    if [[ -z $append_log ]] then
+        tee $log_file <<<"Script started at $start_time_readable"
+    else
+        tee -a $log_file <<<"Script started at $start_time_readable"
+    fi
+
     core_idx=0
     # Calculate means in bc because bash can't work with floats
     for (( i=0; i < $num_cores; i++ ));
